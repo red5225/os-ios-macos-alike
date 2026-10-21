@@ -1,0 +1,39 @@
+name: Build C boot prototype
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x86_64
+          - os: macos-13
+            name: macos-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake libsdl2-dev
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install cmake sdl2
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Package executable
+        run: |
+          mkdir -p dist
+          cp build/os-boot dist/os-boot
+          tar -czf os-boot-${{ matrix.name }}.tar.gz -C dist os-boot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: os-boot-${{ matrix.name }}
+          path: os-boot-${{ matrix.name }}.tar.gz
