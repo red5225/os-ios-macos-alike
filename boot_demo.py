@@ -1,125 +1,109 @@
 #!/usr/bin/env python3
-"""Visual prototype for OS iOS/macOS alike. Python-only mockup, not a real OS."""
+"""Minimal Apple-inspired boot animation prototype. Python standard library only."""
+import argparse
 import tkinter as tk
-import math
-import time
 
-BG = "#080b14"
-PANEL = "#111827"
-ACCENT = "#77d8ff"
-WHITE = "#f3f7ff"
-MUTED = "#8290a7"
+BLACK = "#000000"
+WHITE = "#F5F5F7"
+MUTED = "#77777D"
+TRACK = "#29292D"
+DURATION_MS = 5200
 
-class BootDemo:
-    def __init__(self, root):
+
+class Boot:
+    def __init__(self, root, fullscreen=False):
         self.root = root
-        self.root.title("OS — boot prototype")
-        self.root.geometry("900x560")
-        self.root.minsize(700, 450)
-        self.root.configure(bg=BG)
-        self.canvas = tk.Canvas(root, bg=BG, highlightthickness=0)
+        root.title("OS Startup")
+        root.configure(bg=BLACK)
+        root.resizable(False, False)
+        self.fullscreen = fullscreen
+        root.attributes("-fullscreen", fullscreen)
+        if not fullscreen:
+            w, h = 960, 600
+            root.update_idletasks()
+            x = (root.winfo_screenwidth() - w) // 2
+            y = (root.winfo_screenheight() - h) // 2
+            root.geometry(f"{w}x{h}+{x}+{y}")
+        self.canvas = tk.Canvas(root, bg=BLACK, bd=0, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
-        self.start = time.monotonic()
-        self.phase = "boot"
-        self.root.bind("<Escape>", lambda _e: self.root.destroy())
-        self.root.bind("<Return>", lambda _e: self.desktop())
+        self.started = root.tk.call("clock", "milliseconds")
+        root.bind("<Escape>", lambda _e: root.destroy())
+        root.bind("<F11>", self.toggle_fullscreen)
+        root.bind("<Configure>", self.resize)
         self.draw()
-        self.tick()
+        self.animate()
 
-    def centered(self, y, text, font, fill, **kw):
-        self.canvas.create_text(self.root.winfo_width()/2, y, text=text,
-                                font=font, fill=fill, **kw)
+    def toggle_fullscreen(self, _event=None):
+        self.fullscreen = not self.fullscreen
+        self.root.attributes("-fullscreen", self.fullscreen)
 
-    def draw_logo(self, cx, cy, scale=1.0):
-        # Original rounded-loop mark; intentionally not an Apple logo.
-        r = 34 * scale
-        self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r,
-                                outline=ACCENT, width=max(2, int(3*scale)))
-        self.canvas.create_arc(cx-r*.56, cy-r*.56, cx+r*.56, cy+r*.56,
-                               start=35, extent=290, style="arc",
-                               outline=WHITE, width=max(2, int(4*scale)))
-        self.canvas.create_oval(cx-4*scale, cy-4*scale, cx+4*scale, cy+4*scale,
-                                fill=ACCENT, outline="")
+    def resize(self, _event=None):
+        if hasattr(self, "canvas"):
+            self.root.after_idle(self.draw)
+
+    @staticmethod
+    def ease(t):
+        t = max(0.0, min(1.0, t))
+        return t * t * (3 - 2 * t)
+
+    def logo(self, cx, cy, s):
+        # Simple vector silhouette: a design study, not an Apple product.
+        points = [
+            (cx-2*s,cy-15*s),(cx-12*s,cy-23*s),(cx-24*s,cy-18*s),
+            (cx-30*s,cy-5*s),(cx-27*s,cy+12*s),(cx-19*s,cy+28*s),
+            (cx-10*s,cy+31*s),(cx-2*s,cy+27*s),(cx+7*s,cy+30*s),
+            (cx+18*s,cy+26*s),(cx+27*s,cy+9*s),(cx+29*s,cy-6*s),
+            (cx+21*s,cy-18*s),(cx+10*s,cy-21*s),(cx+1*s,cy-16*s)]
+        self.canvas.create_polygon(points, smooth=True, splinesteps=28,
+                                   fill=WHITE, outline=WHITE, tags="logo")
+        self.canvas.create_oval(cx+3*s,cy-42*s,cx+21*s,cy-28*s,
+                                fill=WHITE, outline=WHITE, tags="logo")
+        self.canvas.create_line(cx+5*s,cy-28*s,cx+17*s,cy-39*s,
+                                fill=BLACK, width=max(1,s), tags="logo")
+        self.canvas.create_oval(cx+18*s,cy-5*s,cx+36*s,cy+13*s,
+                                fill=BLACK, outline=BLACK, tags="logo")
 
     def draw(self):
+        w, h = max(1,self.canvas.winfo_width()), max(1,self.canvas.winfo_height())
+        self.cx, self.cy = w/2, h*.435
         self.canvas.delete("all")
-        w, h = max(self.root.winfo_width(), 700), max(self.root.winfo_height(), 450)
-        cx = w / 2
-        elapsed = time.monotonic() - self.start
-        if self.phase == "boot":
-            pulse = 1 + 0.05 * math.sin(elapsed * 3)
-            self.draw_logo(cx, h*.31, pulse)
-            self.centered(h*.31+64, "OS", ("Helvetica", 29, "bold"), WHITE)
-            self.centered(h*.31+97, "A new system is starting", ("Helvetica", 11), MUTED)
-            bar_w = min(330, w*.52)
-            x0, y0 = cx-bar_w/2, h*.62
-            self.canvas.create_rectangle(x0, y0, x0+bar_w, y0+5, fill="#263247", outline="")
-            progress = min(1, elapsed/6.8)
-            self.canvas.create_rectangle(x0, y0, x0+bar_w*progress, y0+5, fill=ACCENT, outline="")
-            messages = [
-                "Starting firmware interface…",
-                "Checking memory map…",
-                "Preparing display subsystem…",
-                "Loading core services…",
-                "Starting user interface…",
-            ]
-            idx = min(len(messages)-1, int(elapsed/1.35))
-            self.centered(y0+27, messages[idx], ("Menlo", 10), MUTED)
-            self.centered(h-28, "PROTOTYPE  •  PYTHON VISUALIZATION", ("Menlo", 8), "#536078")
-            if elapsed >= 7:
-                self.desktop()
+        self.logo(self.cx,self.cy,min(w,h)/600*.92)
+        self.bw, self.by = min(170,w*.32), h*.72
+        self.canvas.create_line(self.cx-self.bw/2,self.by,self.cx+self.bw/2,self.by,
+                                fill=TRACK,width=3,capstyle=tk.ROUND,tags="track")
+        self.canvas.create_text(self.cx,self.by+34,text="Starting up",fill=MUTED,
+                                font=("Helvetica Neue",10),tags="status")
+
+    def animate(self):
+        elapsed = self.root.tk.call("clock","milliseconds") - self.started
+        p = min(1,elapsed/DURATION_MS)
+        self.canvas.delete("progress")
+        left = self.cx-self.bw/2
+        right = left+self.bw*self.ease(p)
+        if right > left+1:
+            self.canvas.create_line(left,self.by,right,self.by,fill=WHITE,width=3,
+                                    capstyle=tk.ROUND,tags="progress")
+        if p >= 1:
+            self.canvas.itemconfigure("status",text="Ready")
+            self.root.after(900,self.finish)
         else:
-            self.draw_desktop(w, h, elapsed)
+            self.root.after(16,self.animate)
 
-    def draw_desktop(self, w, h, elapsed):
-        # Wallpaper gradient illusion using layered dark bands.
-        for i in range(18):
-            shade = 14 + i
-            color = f"#{shade:02x}{shade+4:02x}{min(45,shade+20):02x}"
-            self.canvas.create_rectangle(0, i*h/18, w, (i+1)*h/18+1, fill=color, outline="")
-        self.canvas.create_oval(w*.48, -h*.52, w*1.15, h*.78, fill="#172e48", outline="")
-        self.canvas.create_oval(-w*.3, h*.48, w*.65, h*1.5, fill="#14243b", outline="")
-        # Top menu bar
-        self.canvas.create_rectangle(0, 0, w, 30, fill="#101722", outline="")
-        self.canvas.create_text(18, 15, text="◉", fill=ACCENT, font=("Helvetica", 12, "bold"), anchor="w")
-        self.canvas.create_text(42, 15, text="OS", fill=WHITE, font=("Helvetica", 10, "bold"), anchor="w")
-        self.canvas.create_text(w-18, 15, text=time.strftime("%a  %H:%M"), fill=WHITE, font=("Helvetica", 9), anchor="e")
-        # Welcome window
-        ww, wh = min(430, w*.7), 225
-        x, y = (w-ww)/2, (h-wh)/2
-        self.canvas.create_rectangle(x+5, y+7, x+ww+5, y+wh+7, fill="#05070b", outline="")
-        self.canvas.create_rectangle(x, y, x+ww, y+wh, fill=PANEL, outline="#344257", width=1)
-        self.canvas.create_rectangle(x, y, x+ww, y+34, fill="#1a2535", outline="")
-        for i, c in enumerate(("#ff6b6b", "#ffd166", "#6ee7a8")):
-            self.canvas.create_oval(x+13+i*16, y+12, x+21+i*16, y+20, fill=c, outline="")
-        self.canvas.create_text(x+ww/2, y+68, text="Welcome.", fill=WHITE, font=("Helvetica", 24, "bold"))
-        self.canvas.create_text(x+ww/2, y+105, text="A familiar feel. A system of our own.", fill="#b9c7d9", font=("Helvetica", 11))
-        self.canvas.create_rectangle(x+ww/2-70, y+145, x+ww/2+70, y+181, fill="#d9f3ff", outline="")
-        self.canvas.create_text(x+ww/2, y+163, text="Explore desktop", fill="#102033", font=("Helvetica", 10, "bold"))
-        # Dock
-        dw = min(350, w*.68)
-        dx = (w-dw)/2
-        self.canvas.create_rectangle(dx, h-64, dx+dw, h-18, fill="#1a2636", outline="#40516a", width=1)
-        for i, (symbol, color) in enumerate((("⌂","#86d7ff"),("▦","#b6a2ff"),("◇","#a7f0c0"),("⚙","#f5d38a"),("●","#f7a6bd"))):
-            bx = dx+22+i*min(63,(dw-44)/4)
-            self.canvas.create_rectangle(bx, h-55, bx+30, h-27, fill=color, outline="", width=0)
-            self.canvas.create_text(bx+15, h-41, text=symbol, fill="#142033", font=("Helvetica", 14, "bold"))
-        self.canvas.create_text(14, h-10, text="ESC to quit", fill="#8b9ab0", font=("Menlo", 8), anchor="w")
+    def finish(self):
+        self.canvas.delete("track")
+        self.canvas.delete("progress")
+        self.canvas.delete("status")
 
-    def desktop(self):
-        self.phase = "desktop"
-        self.start = time.monotonic()
-        self.draw()
-
-    def tick(self):
-        if self.root.winfo_exists():
-            self.draw()
-            self.root.after(40, self.tick)
 
 def main():
+    parser = argparse.ArgumentParser(description="Minimal OS boot animation")
+    parser.add_argument("--fullscreen", action="store_true",
+                        help="fullscreen mode; press Esc to exit")
+    args = parser.parse_args()
     root = tk.Tk()
-    BootDemo(root)
+    Boot(root,args.fullscreen)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()
